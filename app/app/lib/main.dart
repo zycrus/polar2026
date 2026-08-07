@@ -104,7 +104,7 @@ class _MainScreenState extends State<MainScreen> {
                           ),
                           const SizedBox(height: 2),
                           const Text(
-                            "Sa Santa Rosa, instant ang serbisyo sa 'yo.",
+                            "Sa Santa Rosa, Instant Ang Serbisyo Sa Masa.",
                             textAlign: TextAlign.left,
                             style: TextStyle(
                               fontSize: 10, // Increased slightly for better legibility
