@@ -1,172 +1,181 @@
-# INSTAROSA: Santa Rosa Community Services App — Documentation
+# App Guide
 
-A Flutter mobile app that gives residents of Santa Rosa, Laguna a single place
-to report emergencies and community concerns, find healthcare and government
-services, and manage their profile — with real-time data backed by Firebase.
+*Sa Santa Rosa, Instant Ang Serbisyo Sa Masa.*
 
-> Tagline shown in-app: *"Sa Santa Rosa, Instant Ang Serbisyo Sa Masa."*
+Welcome! InstaRosa is your one-stop connection to Santa Rosa City services —
+report emergencies, raise community concerns, book healthcare appointments,
+and access city services, all in one place.
 
 ---
 
-## 1. Tech stack
+## Getting Started
 
-| Layer | Technology |
-|---|---|
-| Framework | Flutter |
-| Backend | Firebase (Firestore, Firebase Auth) |
-| Auth method | Phone number + OTP (SMS) via `firebase_auth` |
-| Maps / location | `flutter_map`, `latlong2`, `geolocator` |
-| Other packages | `flutter_svg`, `slide_to_act`, `url_launcher`, `cloud_firestore` |
+### Creating an Account
 
-## 2. Project structure
+1. Open the app and enter your mobile number.
+2. You'll receive a 6-digit verification code by text message — enter it to
+   confirm it's you.
+3. If it's your first time, you'll be asked to fill in a few details:
+   - Full name
+   - Mobile number
+   - Street address and barangay
+   - An emergency contact name and number
+4. Once submitted, you're in!
 
-```
-lib/
-├── main.dart                  # App entry point, bottom-nav shell (MainScreen)
-├── firebase_options.dart      # Auto-generated Firebase config (FlutterFire CLI)
-├── services/
-│   └── firestore.dart         # FirestoreService — user profile read/write helpers
-├── pages/
-│   ├── emergency.dart         # Home tab 1 — Emergency
-│   ├── community.dart         # Home tab 2 — Community
-│   ├── profile.dart           # Home tab 3 — Profile (center/default tab)
-│   ├── healthcare.dart        # Home tab 4 — Healthcare
-│   ├── services.dart          # Home tab 5 — Services
-│   ├── distress_report.dart   # Emergency report submission form
-│   ├── concern_report.dart    # Community concern report submission form
-│   ├── make_appointment.dart  # Healthcare checkup appointment booking flow
-│   ├── edit_profile.dart      # Edit personal/emergency-contact info
-│   ├── signin.dart            # Phone number sign-in (sends OTP)
-│   ├── signup.dart            # New account registration form
-│   └── otp.dart                # 6-digit OTP verification screen
-├── widgets/
-│   ├── navbar.dart             # CustomBottomNavBar — 5-tab bottom navigation
-│   ├── notification.dart       # NotificationsDialog — recent reports popup
-│   ├── hotlines.dart           # EmergencyHotlinesDialog — hotline directory
-│   ├── card.dart                # CustomCard — generic tappable list card
-│   └── report_card.dart         # ReportCard — expandable report status card
-└── _unused_legacy/             # Earlier/duplicate page versions, kept for reference
-    # not imported anywhere; safe to delete once confirmed unneeded
-```
+### Signing In
 
-`_unused_legacy/` holds older duplicate versions of Emergency, Community,
-Healthcare, and Profile (and a couple of widgets only they used) that predate
-the current design and are no longer wired into the app. See
-`CLEANUP_NOTES.md` for details.
+Already have an account? Just enter your mobile number, and we'll text you a
+new verification code to sign you back in.
 
-## 3. App shell & navigation
+*Didn't get a code?* Wait for the countdown timer to finish, then tap to
+resend.
 
-`main.dart` defines:
+---
 
-- **`MyApp`** — root `MaterialApp`.
-- **`MainScreen`** — a `StatefulWidget` that owns the currently selected tab
-  (`_selectedIndex`, defaulting to **2 = Profile**) and renders:
-  - A header with the app logo/tagline and a notification bell
-    (opens `NotificationsDialog`).
-  - The active page for the selected tab.
-  - A `CustomBottomNavBar` with 5 icons: Emergency, Community, Profile,
-    Healthcare, Services.
-  - A background gradient that changes color per tab.
+## Getting Around
 
-Tab order and matching pages:
+At the bottom of the screen you'll find five tabs:
 
-| Index | Tab | Page |
+| Icon | Tab | What it's for |
 |---|---|---|
-| 0 | Emergency | `EmergencyPage` |
-| 1 | Community | `CommunityPage` |
-| 2 | Profile | `ProfilePage` |
-| 3 | Healthcare | `HealthcarePage` |
-| 4 | Services | `ServicesPage` |
+| 🚨 | **Emergency** | Report emergencies and get quick access to help |
+| 👥 | **Community** | Report community concerns and issues |
+| 👤 | **Profile** | Your info, saved reports, and account settings |
+| ➕ | **Healthcare** | Book checkups and find health services |
+| ☰ | **Services** | Browse city services and programs |
 
-## 4. Authentication flow
+Tap the bell icon 🔔 at the top of any screen to see your recent report
+updates at a glance.
 
-Phone-number based sign-in using Firebase Auth's SMS OTP flow.
+---
 
-1. **`SignInPage`** — user enters a phone number → app sends a verification
-   code via `FirebaseAuth.verifyPhoneNumber`.
-2. If the number is not yet registered, the user is routed to
-   **`SignUpPage`** to provide: full name, phone number, street address,
-   barangay, emergency contact name, and emergency contact number.
-3. **`OtpPage`** — user enters the 6-digit SMS code to confirm their identity.
-   On success:
-   - The Firebase Auth display name is set.
-   - The full profile is saved to Firestore via `FirestoreService.saveUserData`.
-   - The user is returned to the app's home screen.
-4. A resend-code countdown (60s) is used on both the sign-in and OTP screens
-   to throttle repeat SMS requests.
+## Emergency Tab
 
-## 5. Feature walkthrough
+If you're facing an emergency, this is where to go.
 
-### Emergency tab (`emergency.dart`)
-- "Slide to call" button for immediate emergency contact.
-- 2×2 grid of response teams (police, fire, medical, disaster response, etc.).
-- "Need Immediate Help" hotline shortcut.
-- Live-updating list of the current user's recent emergency reports, pulled
-  from Firestore and sorted by most recent.
-- Tapping "Report" opens **`DistressReportPage`**.
+- **Slide to call** — slide the button to immediately call for help.
+- **Response teams** — quick shortcuts to police, fire, medical, and disaster
+  response contacts.
+- **Report an emergency** — tap the report button to file a detailed report.
+  You'll be asked for:
+  - The type of emergency
+  - Your barangay
+  - Your location — share it automatically using your GPS, drop a pin on the
+    map, or describe a nearby landmark
+  - A short description of what's happening
+- **Recent reports** — see the status of emergencies you've reported, updated
+  in real time.
 
-### Community tab (`community.dart`)
-- "File a Concern" button opens **`ConcernReportPage`**.
-- 2×2 grid of concern categories (e.g. sanitation, noise, safety).
-- Live-updating list of the current user's community report history.
+> If you or someone nearby needs immediate help, use the "Need Immediate
+> Help" hotline shortcut on this screen for emergency numbers you can call
+> right away.
 
-### Report forms (`distress_report.dart`, `concern_report.dart`)
-Both forms collect: category, barangay, and location — captured one of three
-ways (`LocationMode`):
-- **GPS** — current device position via `geolocator`.
-- **PIN** — manually dropped pin on a `flutter_map` map.
-- **LANDMARK** — free-text description of a nearby landmark.
+---
 
-Plus a free-text description of the issue (`natureOfDistress` /
-`natureOfConcern`). On submit, a document is written to the Firestore
-`reports` collection (see [Data model](#6-data-model) below), and a
-confirmation snackbar is shown before the user is returned to the previous
-screen.
+## Community Tab
 
-### Healthcare tab (`healthcare.dart`)
-- **Medical Services**: e-Konsulta (external telehealth link), Barangay
-  Health Center and Santa Rosa City Hospital — both open
-  **`CheckupAppointmentPage`** to book a checkup.
-- **Mental Health**: link out to an external mental-health support platform.
+Use this tab to raise non-emergency concerns in your community — things like
+sanitation, noise complaints, or safety hazards.
 
-### Appointment booking (`make_appointment.dart`)
-A 3-step stepper flow for booking a checkup at a chosen facility:
-1. **Schedule** — pick a date and time slot.
-2. **Details** — enter visit details/reason.
-3. **Confirm** — review and submit the booking.
+- **File a Concern** — tap to open the report form. Just like emergency
+  reports, you'll choose a category, your barangay, your location, and add a
+  short description.
+- **Concern categories** — browse common categories for a quick start.
+- **Your report history** — track the status of concerns you've filed.
 
-### Services tab (`services.dart`)
-A categorized directory of city services, grouped under section headers:
-- **Education & Training** — e-TESDA Portal, CEAP Scholarship, TESDA Laguna
-  Centers, Santa Rosa TESDA Courses (all open external links).
-- **Legal Assistance** — City Legal Office.
-- **Permits & Regulation** — Business Permits & Licensing, Building &
-  Construction Permits, Sanitation & Health Permits.
+---
 
-Entries without a live backend/URL yet show a "Coming soon" snackbar instead
-of navigating anywhere.
+## Healthcare Tab
 
-### Profile tab (`profile.dart`)
-- Header card with the signed-in user's name and saved address.
-- Quick-access shortcuts.
-- Personal information: saved address, emergency contact.
-- Recent activity: the user's 3 most recent reports (from the `reports`
-  collection), rendered with `ReportCard`.
-- Edit Profile → opens **`EditProfilePage`** to update name, address,
-  barangay, and emergency contact, saved via `FirestoreService.updateUserProfile`.
-- Sign out.
+Find and access healthcare support:
 
-### Report cards (`widgets/report_card.dart`)
-An expandable card used on the Emergency, Community, and Profile tabs to show
-a report's status. When expanded, it reveals barangay, location summary,
-description, and submission date, plus contextual actions:
-- **Withdraw Report** — available while status is pending/in progress.
-- **Close Report** — available once status is `resolved`.
+- **e-Konsulta** — connect with a licensed healthcare professional remotely,
+  available anytime.
+- **Barangay Health Center** — book a checkup appointment at your local
+  health center.
+- **Santa Rosa City Hospital** — book a checkup appointment at the city
+  hospital.
+- **Mental Health Services** — confidential access to mental health support
+  and counseling resources.
 
-### Notifications (`widgets/notification.dart`)
-A popup dialog (opened from the bell icon in the app header) listing the
-user's recent reports across both emergency and community categories,
-sorted by most recent.
+### Booking a Checkup
 
-### Emergency hotlines (`widgets/hotlines.dart`)
-A popup dialog listing local emergency hotline numbers for quick reference/calling.
+1. Choose a facility (Barangay Health Center or Santa Rosa City Hospital).
+2. **Schedule** — pick a convenient date and time.
+3. **Details** — let them know the reason for your visit.
+4. **Confirm** — review your booking and submit it.
+
+---
+
+## Services Tab
+
+Browse city programs and services organized by category:
+
+- **Education & Training** — online technical/vocational courses, scholarship
+  programs, and accredited training centers.
+- **Legal Assistance** — connect with the City Legal Office.
+- **Permits & Regulation** — information on business, building, and
+  sanitation/health permits.
+
+Some services are marked "Coming soon" — these are being added and aren't
+available to open just yet.
+
+---
+
+## Profile Tab
+
+Your personal space in the app:
+
+- **Your info** — see your name and saved address at a glance.
+- **Personal information** — your saved address and emergency contact on
+  file.
+- **Recent activity** — your most recent reports across Emergency and
+  Community.
+- **Edit Profile** — update your name, address, barangay, or emergency
+  contact anytime.
+- **Sign Out** — securely log out of your account.
+
+---
+
+## Managing Your Reports
+
+Every report you file — whether an emergency or a community concern — shows
+up as a card you can tap to expand for more detail: your barangay, location,
+description, and when it was submitted.
+
+Depending on the status, you can:
+
+- **Withdraw a report** — if it's still pending or being worked on and you no
+  longer need it addressed.
+- **Close a report** — once it's marked resolved, to confirm you're all set.
+
+Report statuses you might see:
+- **Pending** — received, awaiting action
+- **In Progress** — being handled
+- **Resolved** — action has been completed
+- **Closed** — confirmed complete by you
+- **Withdrawn** — cancelled by you
+
+---
+
+## Tips
+
+- Keep your emergency contact info up to date in your Profile — it helps
+  responders reach the right person quickly.
+- When reporting, sharing your GPS location or dropping a pin gives the
+  fastest, most accurate response. Use the landmark option only if location
+  services aren't available.
+- Check the notification bell 🔔 regularly for updates on your reports.
+
+---
+
+## Need Help?
+
+If something isn't working as expected, try:
+1. Checking your internet connection.
+2. Signing out and signing back in.
+3. Making sure location permissions are enabled if you're reporting an
+   emergency or concern.
+
+For urgent, life-threatening emergencies, always use the Slide to Call button
+or dial your local emergency hotline directly.
