@@ -12,17 +12,25 @@ class CustomBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Get the system navigation bar height (control bar padding)
+    final double systemBottomPadding = MediaQuery.of(context).padding.bottom;
+
     // List of icons matching your design
     final List<IconData> navIcons = [
-      Icons.emergency,          // Siren / Emergency
-      Icons.people,             // Community
-      Icons.person,             // Profile
-      Icons.medical_services,   // Healthcare / Stethoscope
-      Icons.menu,               // Services / Menu
+      Icons.emergency,        // Siren / Emergency
+      Icons.people,           // Community
+      Icons.person,           // Profile
+      Icons.medical_services, // Healthcare / Stethoscope
+      Icons.menu,             // Services / Menu
     ];
 
     return Padding(
-      padding: const EdgeInsets.only(left: 60.0, right: 60.0, bottom: 20.0),
+      padding: EdgeInsets.only(
+        left: 40.0,
+        right: 40.0,
+        // Dynamically add system bottom inset + 16px extra clearance
+        bottom: systemBottomPadding > 0 ? systemBottomPadding + 8.0 : 20.0,
+      ),
       child: Container(
         height: 64,
         padding: const EdgeInsets.symmetric(horizontal: 8.0),

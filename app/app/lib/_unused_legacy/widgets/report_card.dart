@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ReportCard extends StatefulWidget {
-  final String? reportId;
   final IconData icon;
   final Color iconColor;
   final String title;
@@ -20,7 +19,6 @@ class ReportCard extends StatefulWidget {
 
   const ReportCard({
     super.key,
-    this.reportId,
     required this.icon,
     required this.iconColor,
     required this.title,
@@ -41,7 +39,6 @@ class ReportCard extends StatefulWidget {
 
 class _ReportCardState extends State<ReportCard> {
   bool _isExpanded = false;
-  bool _isProcessing = false;
 
   String _formatTimestamp(Timestamp? timestamp) {
     if (timestamp == null) return 'N/A';
@@ -61,100 +58,8 @@ class _ReportCardState extends State<ReportCard> {
     return 'Location recorded';
   }
 
-  /// Handles report withdrawal (available when pending / in progress)
-  Future<void> _handleWithdrawReport() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Withdraw Report?'),
-        content: const Text(
-          'Are you sure you want to withdraw this report? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC8532B)),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Withdraw', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true || widget.reportId == null) return;
-
-    setState(() => _isProcessing = true);
-
-    try {
-      // 1. Update status in Firestore
-      await FirebaseFirestore.instance
-          .collection('reports') // <-- MUST MATCH YOUR FIRESTORE COLLECTION NAME EXACTLY
-          .doc(widget.reportId)
-          .update({
-            'status': 'Withdrawn',
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Report withdrawn successfully.')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to withdraw report: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
-  }
-
-  /// Handles marking report as closed (enabled only when status is resolved)
-  Future<void> _handleCloseReport() async {
-    if (widget.reportId == null || widget.reportId!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error: Missing Report ID.')),
-      );
-      return;
-    }
-
-    setState(() => _isProcessing = true);
-
-    try {
-      // 1. Update status in Firestore
-      await FirebaseFirestore.instance
-          .collection('reports') // <-- MUST MATCH YOUR FIRESTORE COLLECTION NAME EXACTLY
-          .doc(widget.reportId)
-          .update({
-            'status': 'Closed',
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Report successfully marked as closed.')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update status: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final currentStatus = widget.status.toLowerCase();
-
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
@@ -275,79 +180,6 @@ class _ReportCardState extends State<ReportCard> {
                         label: 'Date Submitted',
                         value: _formatTimestamp(widget.createdAt),
                       ),
-
-                      // --- CONDITIONAL ACTION BUTTONS ---
-                      if (!_isProcessing) ...[
-                        // Option A: Status is Resolved -> Show Close Report button only
-                        if (currentStatus == 'resolved') ...[
-                          const SizedBox(height: 12),
-                          const Divider(height: 1, color: Color(0xFFEAE6E4)),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF2E7D32),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                padding: const EdgeInsets.symmetric(vertical: 10),
-                              ),
-                              onPressed: _handleCloseReport,
-                              icon: const Icon(Icons.check_circle_outline, size: 16),
-                              label: const Text(
-                                'Close Report',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ]
-                        // Option B: Status is Pending or In Progress -> Show Withdraw button only
-                        else if (currentStatus != 'closed' && currentStatus != 'withdrawn') ...[
-                          const SizedBox(height: 12),
-                          const Divider(height: 1, color: Color(0xFFEAE6E4)),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFFC8532B),
-                                side: const BorderSide(color: Color(0xFFC8532B)),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                padding: const EdgeInsets.symmetric(vertical: 10),
-                              ),
-                              onPressed: _handleWithdrawReport,
-                              icon: const Icon(Icons.cancel_outlined, size: 16),
-                              label: const Text(
-                                'Withdraw Report',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ] else ...[
-                        const SizedBox(height: 12),
-                        const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(8.0),
-                            child: SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),

@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'widgets/navbar.dart';
-
-//#FCC8B2
+import 'package:firebase_core/firebase_core.dart';
 
 import 'pages/emergency.dart';
 import 'pages/community.dart';
 import 'pages/services.dart';
 import 'pages/healthcare.dart';
 import 'pages/profile.dart';
+import 'widgets/navbar.dart';
+import 'widgets/notification.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
 
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -51,17 +52,17 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const Color color1 = Color(0xFFF9C7B0);
-    const Color color2 = Color(0xFFFBEBC9);
-    const Color color3 = Color(0xFFF7D8B8);
-    const Color color4 = Color(0xFFF6D3D3);
-    const Color color5 = Color(0xFFF3E4CF);
+    const Color emergencyGradientColor = Color(0xFFF9C7B0);
+    const Color communityGradientColor = Color(0xFFFBEBC9);
+    const Color profileGradientColor = Color(0xFFF7D8B8);
+    const Color healthcareGradientColor = Color(0xFFF6D3D3);
+    const Color servicesGradientColor = Color(0xFFF3E4CF);
     final List<Color> pageGradientColors = [
-      color1, // EmergencyPage
-      color2, // CommunityPage
-      color3, // ProfilePage
-      color4, // HealthcarePage
-      color5, // ServicesPage
+      emergencyGradientColor,
+      communityGradientColor,
+      profileGradientColor,
+      healthcareGradientColor,
+      servicesGradientColor,
     ];
 
     final List<Widget> pages = [
@@ -87,37 +88,65 @@ class _MainScreenState extends State<MainScreen> {
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.only(top: 0.0, bottom: 8.0),
-                child: Column(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      children: [
-                        SvgPicture.asset(
-                          'assets/svg/logo.svg',
-                          height: 60,
-                        ),
-                      ],
+                    // --- LEFT COLUMN: LOGO + SUBTEXT ---
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SvgPicture.asset(
+                            'assets/svg/logo.svg',
+                            height: 50, // Slightly adjusted for better vertical balance
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            "Sa Santa Rosa, instant ang serbisyo sa 'yo.",
+                            textAlign: TextAlign.left,
+                            style: TextStyle(
+                              fontSize: 10, // Increased slightly for better legibility
+                              fontWeight: FontWeight.w400,
+                              color: Color(0xFF6E5D53),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.start,
+
+                    // --- RIGHT ICON: NOTIFICATION WITH BADGE ---
+                    Stack(
                       children: [
-                        const SizedBox(width: 16),
-                        const Text(
-                          "Sa Santa Rosa, instant ang serbisyo sa 'yo.",
-                          textAlign: TextAlign.left,
-                          style: TextStyle(
-                            fontSize: 6,
-                            fontWeight: FontWeight.w400,
-                            color: Color(0xFF6E5D53),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.notifications_none,
+                            size: 28,
+                            color: Color(0xFF3E2723),
+                          ),
+                          onPressed: () {
+                            NotificationsDialog.show(context);
+                          },
+                        ),
+                        Positioned(
+                          right: 12,
+                          top: 12,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFC8532B),
+                              shape: BoxShape.circle,
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
                   ],
                 ),
               ),
+              const SizedBox(height: 6),
               Expanded(
                 child: pages[_selectedIndex],
               ),
@@ -130,42 +159,6 @@ class _MainScreenState extends State<MainScreen> {
         currentIndex: _selectedIndex,
         onTap: _changeTab,
       ),
-
-      // bottomNavigationBar: BottomNavigationBar(
-      //   backgroundColor: Colors.white,
-      //   type: BottomNavigationBarType.fixed,
-      //   enableFeedback: false,
-      //   currentIndex: _selectedIndex,
-      //   onTap: _onItemTapped,
-      //   selectedItemColor: Colors.redAccent,
-      //   unselectedItemColor: Colors.grey,
-      //   items: [
-      //     const BottomNavigationBarItem(
-      //       icon: Icon(Icons.phone),
-      //       label: 'Emergency',
-      //     ),
-
-      //     const BottomNavigationBarItem(
-      //       icon: Icon(Icons.people),
-      //       label: 'Community',
-      //     ),
-
-      //     const BottomNavigationBarItem(
-      //       icon: Icon(Icons.search),
-      //       label: 'Services', // Empty label to keep it clean
-      //     ),
-
-      //     const BottomNavigationBarItem(
-      //       icon: Icon(Icons.favorite),
-      //       label: 'Healthcare',
-      //     ),
-
-      //     const BottomNavigationBarItem(
-      //       icon: Icon(Icons.person),
-      //       label: 'Profile',
-      //     ),
-      //   ],
-      // ),
     );
   }
 }

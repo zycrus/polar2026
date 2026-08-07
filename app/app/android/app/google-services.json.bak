@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "699754239210",
+    "project_id": "mythical-ninjas-5d022",
+    "storage_bucket": "mythical-ninjas-5d022.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:699754239210:android:dd8fa612331a657ce6f393",
+        "android_client_info": {
+          "package_name": "com.example.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCmekw9hLFPEPIa8A1htI4Vwc7TSMXf9go"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:699754239210:android:2cf447e5fadd96b6e6f393",
+        "android_client_info": {
+          "package_name": "com.yzk1t.instarosa"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCmekw9hLFPEPIa8A1htI4Vwc7TSMXf9go"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

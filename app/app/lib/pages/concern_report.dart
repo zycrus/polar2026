@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'signin.dart';
+
+enum LocationMode { gps, pin, landmark }
 
 class ConcernReportPage extends StatefulWidget {
   final String selectedCategory;
 
   const ConcernReportPage({
     super.key,
-    this.selectedCategory = 'CDRRMO',
+    this.selectedCategory = 'Noise',
   });
 
   @override
@@ -14,21 +22,301 @@ class ConcernReportPage extends StatefulWidget {
 
 class _ConcernReportPageState extends State<ConcernReportPage> {
   late String _selectedCategory;
-  bool _useGps = true;
+  LocationMode _locationMode = LocationMode.gps;
+  bool _isLoadingGps = false;
+  bool _isSubmitting = false;
+  Position? _currentPosition;
+  LatLng? _pinnedPosition;
+
+  String? _selectedBarangay;
   final TextEditingController _natureController = TextEditingController();
+  final TextEditingController _landmarkController = TextEditingController();
 
   final List<String> _categories = ['Noise', 'Disorder', 'Infrastructure', 'Parking'];
+
+  final List<String> _barangays = [
+    'Aplaya',
+    'Balibago',
+    'Caingin',
+    'Dila',
+    'Dita',
+    'Don Jose',
+    'Ibaba',
+    'Kanluran',
+    'Labas',
+    'Macabling',
+    'Malitlit',
+    'Malusak',
+    'Market Area',
+    'Pooc',
+    'Pulong Santa Cruz',
+    'Santo Domingo',
+    'Sinalhan',
+    'Tagapo',
+  ];
 
   @override
   void initState() {
     super.initState();
     _selectedCategory = widget.selectedCategory;
+    _fetchGpsLocation();
   }
 
   @override
   void dispose() {
     _natureController.dispose();
+    _landmarkController.dispose();
     super.dispose();
+  }
+
+  Future<void> _fetchGpsLocation() async {
+    setState(() => _isLoadingGps = true);
+
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location services are disabled. Please enable GPS.')),
+          );
+        }
+        setState(() => _isLoadingGps = false);
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Location permissions are denied.')),
+            );
+          }
+          setState(() => _isLoadingGps = false);
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location permissions are permanently denied.')),
+          );
+        }
+        setState(() => _isLoadingGps = false);
+        return;
+      }
+
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high
+      );
+
+      setState(() {
+        _currentPosition = position;
+        _isLoadingGps = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to get location: $e')),
+        );
+      }
+      setState(() => _isLoadingGps = false);
+    }
+  }
+
+  Future<void> _openMapPinPicker() async {
+    LatLng initialCenter = _pinnedPosition ??
+        (_currentPosition != null
+            ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
+            : const LatLng(14.3122, 121.0913)); // Santa Rosa, Laguna default
+
+    LatLng tempSelected = initialCenter;
+
+    final LatLng? picked = await showDialog<LatLng>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Pin Location on Map', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              contentPadding: EdgeInsets.zero,
+              content: SizedBox(
+                width: double.maxFinite,
+                height: 350,
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8)),
+                  child: FlutterMap(
+                    options: MapOptions(
+                      initialCenter: initialCenter,
+                      initialZoom: 15.0,
+                      onTap: (tapPosition, point) {
+                        setDialogState(() {
+                          tempSelected = point;
+                        });
+                      },
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.yzk1t.instarosapp',
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: tempSelected,
+                            width: 40,
+                            height: 40,
+                            child: const Icon(
+                              Icons.location_on,
+                              color: Color(0xFFB8843A),
+                              size: 40,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, null),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB8843A)),
+                  onPressed: () => Navigator.pop(context, tempSelected),
+                  child: const Text('Confirm Pin', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _pinnedPosition = picked;
+        _locationMode = LocationMode.pin;
+      });
+    }
+  }
+
+  Future<void> _handleSubmitReport() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please sign in to submit a concern report.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
+      return;
+    }
+
+    if (_selectedBarangay == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a barangay first.')),
+      );
+      return;
+    }
+
+    if (_locationMode == LocationMode.landmark && _landmarkController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter street or landmark details.')),
+      );
+      return;
+    }
+
+    if (_locationMode == LocationMode.pin && _pinnedPosition == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a position on the map.')),
+      );
+      return;
+    }
+
+    if (_natureController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please describe the nature of your concern.')),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      String userName = 'User';
+      String userPhone = '';
+
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get();
+
+      if (userDoc.exists) {
+        final userData = userDoc.data();
+        userName = userData?['fullName'] ?? userData?['name'] ?? currentUser.displayName ?? 'User';
+        userPhone = userData?['phoneNumber'] ?? currentUser.phoneNumber ?? '';
+      } else {
+        userName = currentUser.displayName ?? 'User';
+        userPhone = currentUser.phoneNumber ?? '';
+      }
+
+      GeoPoint? geoPoint;
+      if (_locationMode == LocationMode.gps && _currentPosition != null) {
+        geoPoint = GeoPoint(_currentPosition!.latitude, _currentPosition!.longitude);
+      } else if (_locationMode == LocationMode.pin && _pinnedPosition != null) {
+        geoPoint = GeoPoint(_pinnedPosition!.latitude, _pinnedPosition!.longitude);
+      }
+
+      final reportData = {
+        'reportType': 'community',
+        'category': _selectedCategory,
+        'barangay': _selectedBarangay,
+        'locationType': _locationMode.name.toUpperCase(),
+        'landmarkDetails': _locationMode == LocationMode.landmark ? _landmarkController.text.trim() : null,
+        'coordinates': geoPoint,
+        'natureOfConcern': _natureController.text.trim(),
+        'userId': currentUser.uid,
+        'userName': userName,
+        'userPhone': userPhone,
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      await FirebaseFirestore.instance.collection('reports').add(reportData);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Concern report submitted successfully!')),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to submit report: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  String _formatPhoneNumber(String phone) {
+    final cleaned = phone.replaceAll(RegExp(r'\D'), '');
+    if (cleaned.length >= 11) {
+      final prefix = cleaned.substring(0, 4);
+      final suffix = cleaned.substring(cleaned.length - 3);
+      return '$prefix •• •• $suffix';
+    }
+    return phone.isNotEmpty ? phone : 'No phone number';
   }
 
   @override
@@ -44,9 +332,8 @@ class _ConcernReportPageState extends State<ConcernReportPage> {
           colors: [startColor, endColor],
         ),
       ),
-
       child: Scaffold(
-        backgroundColor: Colors.transparent, // Make the scaffold background transparent
+        backgroundColor: Colors.transparent,
         body: SafeArea(
           child: Column(
             children: [
@@ -69,14 +356,12 @@ class _ConcernReportPageState extends State<ConcernReportPage> {
                   ),
                 ),
               ),
-
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 20.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Distress Report Card Header
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(16.0),
@@ -111,10 +396,7 @@ class _ConcernReportPageState extends State<ConcernReportPage> {
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 6,
-                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFB8843A),
                                 borderRadius: BorderRadius.circular(20),
@@ -140,27 +422,19 @@ class _ConcernReportPageState extends State<ConcernReportPage> {
                           final isSelected = cat == _selectedCategory;
                           return Expanded(
                             child: GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _selectedCategory = cat;
-                                });
-                              },
+                              onTap: () => setState(() => _selectedCategory = cat),
                               child: Container(
                                 margin: const EdgeInsets.symmetric(horizontal: 4),
                                 padding: const EdgeInsets.symmetric(vertical: 12.0),
                                 decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? const Color(0xFF7C3D1D)
-                                      : Colors.white,
+                                  color: isSelected ? const Color(0xFF7C3D1D) : Colors.white,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Center(
                                   child: Text(
                                     cat,
                                     style: TextStyle(
-                                      color: isSelected
-                                          ? Colors.white
-                                          : const Color(0xFF6E5649),
+                                      color: isSelected ? Colors.white : const Color(0xFF6E5649),
                                       fontWeight: FontWeight.bold,
                                       fontSize: 12,
                                     ),
@@ -185,26 +459,63 @@ class _ConcernReportPageState extends State<ConcernReportPage> {
                           children: [
                             Expanded(
                               child: _buildLocationToggle(
-                                icon: Icons.push_pin,
+                                icon: Icons.my_location,
                                 iconColor: const Color(0xFFD94A6B),
-                                label: 'Use GPS',
-                                isSelected: _useGps,
-                                onTap: () => setState(() => _useGps = true),
+                                label: 'GPS',
+                                isSelected: _locationMode == LocationMode.gps,
+                                onTap: () {
+                                  setState(() => _locationMode = LocationMode.gps);
+                                  if (_currentPosition == null) _fetchGpsLocation();
+                                },
+                              ),
+                            ),
+                            Expanded(
+                              child: _buildLocationToggle(
+                                icon: Icons.push_pin,
+                                iconColor: const Color(0xFFB8843A),
+                                label: 'Pin Map',
+                                isSelected: _locationMode == LocationMode.pin,
+                                onTap: _openMapPinPicker,
                               ),
                             ),
                             Expanded(
                               child: _buildLocationToggle(
                                 icon: Icons.edit,
                                 iconColor: const Color(0xFFD97746),
-                                label: 'Type Landmark',
-                                isSelected: !_useGps,
-                                onTap: () => setState(() => _useGps = false),
+                                label: 'Landmark',
+                                isSelected: _locationMode == LocationMode.landmark,
+                                onTap: () => setState(() => _locationMode = LocationMode.landmark),
                               ),
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 10),
+
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _selectedBarangay,
+                            hint: const Text('Select Barangay', style: TextStyle(color: Color(0xFF8C7B73), fontSize: 14)),
+                            isExpanded: true,
+                            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF6E5649)),
+                            items: _barangays.map((String barangay) {
+                              return DropdownMenuItem<String>(
+                                value: barangay,
+                                child: Text('Brgy. $barangay', style: const TextStyle(color: Color(0xFF4A3E39), fontSize: 14)),
+                              );
+                            }).toList(),
+                            onChanged: (newValue) => setState(() => _selectedBarangay = newValue),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
@@ -212,32 +523,80 @@ class _ConcernReportPageState extends State<ConcernReportPage> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(16),
                         ),
-                        child: const Text(
-                          'Brgy. Pulong Sta. Cruz, near Chowking',
-                          style: TextStyle(
-                            color: Color(0xFF4A3E39),
-                            fontSize: 14,
-                          ),
-                        ),
+                        child: _locationMode == LocationMode.gps
+                            ? Row(
+                                children: [
+                                  Expanded(
+                                    child: _isLoadingGps
+                                        ? const Text('Acquiring GPS coordinates...', style: TextStyle(color: Color(0xFF8C7B73), fontSize: 14))
+                                        : Text(
+                                            _currentPosition != null
+                                                ? 'Lat: ${_currentPosition!.latitude.toStringAsFixed(5)}, Long: ${_currentPosition!.longitude.toStringAsFixed(5)}'
+                                                : 'GPS position unavailable',
+                                            style: const TextStyle(color: Color(0xFF4A3E39), fontSize: 14),
+                                          ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.refresh, size: 20, color: Color(0xFF7C3D1D)),
+                                    onPressed: _fetchGpsLocation,
+                                    tooltip: 'Refresh GPS',
+                                    constraints: const BoxConstraints(),
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                ],
+                              )
+                            : _locationMode == LocationMode.pin
+                                ? Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          _pinnedPosition != null
+                                              ? 'Pinned: ${_pinnedPosition!.latitude.toStringAsFixed(5)}, ${_pinnedPosition!.longitude.toStringAsFixed(5)}'
+                                              : 'No map pin set',
+                                          style: const TextStyle(color: Color(0xFF4A3E39), fontSize: 14),
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed: _openMapPinPicker,
+                                        style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                                        child: const Text('Change Pin', style: TextStyle(color: Color(0xFFB8843A), fontWeight: FontWeight.bold)),
+                                      ),
+                                    ],
+                                  )
+                                : TextField(
+                                    controller: _landmarkController,
+                                    decoration: const InputDecoration(
+                                      hintText: 'Enter specific street or landmark details...',
+                                      hintStyle: TextStyle(color: Color(0xFFAAA09A), fontSize: 14),
+                                      border: InputBorder.none,
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  ),
                       ),
                       const SizedBox(height: 20),
 
                       _buildSectionHeader('IDENTITY'),
                       const SizedBox(height: 8),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: const Text(
-                          'Maria Reyes · 0917 •• •• 214',
-                          style: TextStyle(
-                            color: Color(0xFF4A3E39),
-                            fontSize: 14,
-                          ),
-                        ),
+                      StreamBuilder<User?>(
+                        stream: FirebaseAuth.instance.authStateChanges(),
+                        builder: (context, authSnapshot) {
+                          final currentUser = authSnapshot.data;
+                          if (currentUser == null) return _buildIdentityBox('Guest User · Logged Out');
+
+                          return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                            stream: FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots(),
+                            builder: (context, firestoreSnapshot) {
+                              if (firestoreSnapshot.connectionState == ConnectionState.waiting) {
+                                return _buildIdentityBox('Loading user identity...');
+                              }
+                              final userData = firestoreSnapshot.data?.data();
+                              final String name = userData?['fullName'] ?? userData?['name'] ?? currentUser.displayName ?? 'User';
+                              final String rawPhone = userData?['phoneNumber'] ?? currentUser.phoneNumber ?? '';
+                              return _buildIdentityBox('$name · ${_formatPhoneNumber(rawPhone)}');
+                            },
+                          );
+                        },
                       ),
                       const SizedBox(height: 20),
 
@@ -254,10 +613,7 @@ class _ConcernReportPageState extends State<ConcernReportPage> {
                           maxLines: 3,
                           decoration: const InputDecoration(
                             hintText: "Describe what's happening...",
-                            hintStyle: TextStyle(
-                              color: Color(0xFFAAA09A),
-                              fontSize: 14,
-                            ),
+                            hintStyle: TextStyle(color: Color(0xFFAAA09A), fontSize: 14),
                             border: InputBorder.none,
                           ),
                         ),
@@ -270,25 +626,20 @@ class _ConcernReportPageState extends State<ConcernReportPage> {
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFD35331),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(26),
-                            ),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
                             elevation: 2,
                           ),
-                          onPressed: () {
-                            // Handle report submission
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Report Submitted!')),
-                            );
-                          },
-                          child: const Text(
-                            'Submit Report',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
+                          onPressed: _isSubmitting ? null : _handleSubmitReport,
+                          child: _isSubmitting
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                                )
+                              : const Text(
+                                  'Submit Report',
+                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -303,15 +654,19 @@ class _ConcernReportPageState extends State<ConcernReportPage> {
     );
   }
 
+  Widget _buildIdentityBox(String text) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+      child: Text(text, style: const TextStyle(color: Color(0xFF4A3E39), fontSize: 14)),
+    );
+  }
+
   Widget _buildSectionHeader(String title) {
     return Text(
       title,
-      style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.bold,
-        letterSpacing: 1.2,
-        color: Color(0xFF8C7B73),
-      ),
+      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: Color(0xFF8C7B73)),
     );
   }
 
@@ -334,14 +689,10 @@ class _ConcernReportPageState extends State<ConcernReportPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, size: 16, color: iconColor),
-            const SizedBox(width: 6),
+            const SizedBox(width: 4),
             Text(
               label,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: Color(0xFF4A3E39),
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF4A3E39)),
             ),
           ],
         ),
