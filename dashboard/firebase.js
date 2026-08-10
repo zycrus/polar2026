@@ -166,6 +166,17 @@ function getDefaultSeverity(category) {
   return category === "distress" ? "high" : "medium";
 }
 
+// Only these four values mean anything to the dashboard. Anything else —
+// missing field, unexpected casing, stray text, a failed/partial write —
+// gets normalized to "pending" so it stays visibly active in the queue
+// instead of silently mislabeling itself as closed while staying stuck.
+const VALID_STATUSES = ["pending", "dispatched", "resolved", "cancelled"];
+function normalizeStatus(raw) {
+  if (typeof raw !== "string") return "pending";
+  const cleaned = raw.trim().toLowerCase();
+  return VALID_STATUSES.includes(cleaned) ? cleaned : "pending";
+}
+
 function firestoreDocToIncident(docSnap) {
   const d = docSnap.data();
   const title = d[FIELD_MAP.title] || "Untitled Report";
@@ -188,7 +199,7 @@ function firestoreDocToIncident(docSnap) {
     reporter: d[FIELD_MAP.reporter] || "Anonymous",
     phone: d[FIELD_MAP.phone] || "—",
     severity: d[FIELD_MAP.severity] || getDefaultSeverity(category),
-    status: d[FIELD_MAP.status] || "pending",
+    status: normalizeStatus(d[FIELD_MAP.status]),
     minsAgo: minutesAgo(d[FIELD_MAP.timestamp]),
     unit: d[FIELD_MAP.unit] || null,
     dispatchScope: d[FIELD_MAP.dispatchScope] || null,

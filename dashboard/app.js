@@ -269,14 +269,14 @@ function cardHtml(inc) {
     dispatched: "DISPATCHED",
     resolved: "RESOLVED",
     cancelled: "CANCELLED"
-  }[inc.status];
+  }[inc.status] || "PENDING";
 
   const statusClass = {
     pending: "status-pending",
     dispatched: "status-dispatched",
     resolved: "status-resolved",
     cancelled: "status-cancelled"
-  }[inc.status];
+  }[inc.status] || "status-pending";
 
   let actions = "";
   if (inc.status === "pending") {
@@ -287,8 +287,16 @@ function cardHtml(inc) {
          <button class="btn btn-dismiss" data-action="dismiss" data-id="${inc.id}">Dismiss</button>`;
   } else if (inc.status === "dispatched") {
     actions = `<button class="btn btn-resolve" data-action="resolve" data-id="${inc.id}">Mark Resolved</button>`;
-  } else {
+  } else if (inc.status === "resolved" || inc.status === "cancelled") {
     actions = `<span class="closed-label">${inc.status === "resolved" ? "Closed" : "Cancelled"}</span>`;
+  } else {
+    // Unrecognized status — treat like pending rather than silently
+    // claiming it's cancelled while it stays stuck in the active queue.
+    actions = inc.category === "distress"
+      ? `<button class="btn btn-primary" data-action="dispatch" data-id="${inc.id}">Dispatch Unit</button>
+         <button class="btn btn-secondary" data-action="resolve" data-id="${inc.id}">Resolve</button>`
+      : `<button class="btn btn-resolve" data-action="resolve" data-id="${inc.id}">Resolve</button>
+         <button class="btn btn-dismiss" data-action="dismiss" data-id="${inc.id}">Dismiss</button>`;
   }
 
   const unitLine = inc.unit
@@ -820,6 +828,8 @@ const BARANGAY_COORDS = {
 let gmap = null;                 // google.maps.Map instance, once loaded
 let mapMarkers = {};             // incident id -> google.maps.Marker
 let mapInfoWindow = null;        // shared info window for pin clicks
+const markerClickTimers = {};    // per-marker pending single-click timers (for click vs dblclick)
+const MARKER_CLICK_DELAY = 250;  // ms to wait before treating a click as a single click
 let mapApiKey = null;            // key entered by the operator this session
 
 // Pins only ever represent incidents still open — resolved/cancelled
@@ -909,15 +919,30 @@ function renderMapMarkers() {
       }
     });
 
+    // Single click -> show info popup only. Double click -> jump to queue.
+    // Google Maps fires click, click, then dblclick on a double-click, so we
+    // delay the single-click action briefly and cancel it if dblclick lands.
     marker.addListener("click", () => {
-      mapInfoWindow.setContent(`
-        <div style="font-family:Inter,sans-serif;min-width:180px;">
-          <strong style="font-size:13px;">${inc.title}</strong><br>
-          <span style="font-size:11.5px;color:#7A7368;">${inc.location}</span><br>
-          <span style="font-size:11px;color:#A79E92;">${inc.id} · ${inc.severity.toUpperCase()}</span>
-        </div>
-      `);
-      mapInfoWindow.open(gmap, marker);
+      if (markerClickTimers[inc.id]) return; // a click is already pending (mid double-click)
+      markerClickTimers[inc.id] = setTimeout(() => {
+        mapInfoWindow.setContent(`
+          <div style="font-family:Inter,sans-serif;min-width:180px;">
+            <strong style="font-size:13px;">${inc.title}</strong><br>
+            <span style="font-size:11.5px;color:#7A7368;">${inc.location}</span><br>
+            <span style="font-size:11px;color:#A79E92;">${inc.id} · ${inc.severity.toUpperCase()}</span>
+          </div>
+        `);
+        mapInfoWindow.open(gmap, marker);
+        markerClickTimers[inc.id] = null;
+      }, MARKER_CLICK_DELAY);
+    });
+
+    marker.addListener("dblclick", () => {
+      if (markerClickTimers[inc.id]) {
+        clearTimeout(markerClickTimers[inc.id]);
+        markerClickTimers[inc.id] = null;
+      }
+      mapInfoWindow.close();
       goToReport(inc.id);
     });
 
@@ -947,7 +972,21 @@ function renderFallbackPinList() {
   `).join("");
 
   list.querySelectorAll("[data-pin-id]").forEach(el => {
-    el.addEventListener("click", () => goToReport(el.dataset.pinId));
+    const id = el.dataset.pinId;
+    el.addEventListener("click", () => {
+      if (markerClickTimers[id]) return; // a click is already pending (mid double-click)
+      markerClickTimers[id] = setTimeout(() => {
+        el.classList.toggle("pin-item-expanded");
+        markerClickTimers[id] = null;
+      }, MARKER_CLICK_DELAY);
+    });
+    el.addEventListener("dblclick", () => {
+      if (markerClickTimers[id]) {
+        clearTimeout(markerClickTimers[id]);
+        markerClickTimers[id] = null;
+      }
+      goToReport(id);
+    });
   });
 }
 
